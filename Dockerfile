@@ -1,20 +1,20 @@
-# Node.js 20 Base Image (Baileys package ke liye Node 20+ zaroori hai)
-FROM node:20-alpine
+# Alpine ki jagah Debian-based Node 20 (Baileys & WhatsApp bots ke liye best)
+FROM node:20-slim
 
-# Working Directory set karein
+# Working directory set karein
 WORKDIR /usr/src/app
 
 # Package files copy karein
 COPY package*.json ./
 
-# Dependencies install karein
-RUN npm install
+# Clean install with legacy peer deps
+RUN npm install --legacy-peer-deps
 
-# Baaki saara code copy karein
+# Complete source code copy karein
 COPY . .
 
-# App ko 8080 port par expose karein
+# Port expose karein
 EXPOSE 8080
 
-# App start karne ki command
+# App start command
 CMD ["node", "index.js"]
