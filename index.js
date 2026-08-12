@@ -1,9 +1,10 @@
-
 const express = require('express');
 const http = require('http');
 const path = require('path');
 const session = require('express-session');
+const fileUpload = require('express-fileupload');
 const WebSocket = require('ws');
+
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 const { initializeRunningTasks, setBroadcastFunction } = require('./botManager');
@@ -12,17 +13,20 @@ const { connectDb, initDb } = require('./database/database');
 // --- Basic Setup ---
 const app = express();
 const server = http.createServer(app);
-const PORT = process.env.PORT || 21247;
+
+// Cloud hosting (Back4App/Render) ke liye dynamic PORT setting
+const PORT = process.env.PORT || 8080;
+
+// Reverse Proxy ke liye (Cloud server par session support ke liye zaroori)
+app.set('trust proxy', 1);
 
 // --- Middleware ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-const fileUpload = require('express-fileupload');
 app.use(fileUpload());
 
 app.use(session({
-    secret: 'a-very-secret-key-that-you-should-change',
+    secret: process.env.SESSION_SECRET || 'a-very-secret-key-that-you-should-change',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false }
@@ -30,6 +34,7 @@ app.use(session({
 
 // Serve static files from 'public'
 app.use(express.static(path.join(__dirname, 'public')));
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'index.html'));
 });
@@ -85,12 +90,16 @@ setBroadcastFunction(broadcastToAll);
 
 // --- Server Initialization ---
 async function startServer() {
-    await initDb(); // FIX: initDb() call karo taaki tables ban sake
-    await initializeRunningTasks();
+    try {
+        await initDb();
+        await initializeRunningTasks();
 
-    server.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server is listening on http://0.0.0.0:${PORT}`);
-    });
+        server.listen(PORT, '0.0.0.0', () => {
+            console.log(`Server is listening on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
+    }
 }
 
 startServer();
