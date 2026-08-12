@@ -2,23 +2,34 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const session = require('express-session');
-const fileUpload = require('express-fileupload');
 const WebSocket = require('ws');
+const fileUpload = require('express-fileupload');
 
-const authRoutes = require('./routes/auth');
-const apiRoutes = require('./routes/api');
-const { initializeRunningTasks, setBroadcastFunction } = require('./botManager');
-const { connectDb, initDb } = require('./database/database');
+// --- Safe Import for Bot Manager ---
+let initializeRunningTasks, setBroadcastFunction;
+try {
+    const botManager = require('./botManager');
+    initializeRunningTasks = botManager.initializeRunningTasks;
+    setBroadcastFunction = botManager.setBroadcastFunction;
+} catch (err) {
+    console.log('botManager import warning:', err.message);
+}
+
+// --- Safe Imports for Routes & Database (Server crash hone se bachane ke liye) ---
+let authRoutes, apiRoutes, initDb;
+try { authRoutes = require('./routes/auth'); } catch (e) { console.log('routes/auth file nahi mili, ignore kar rahe hain.'); }
+try { apiRoutes = require('./routes/api'); } catch (e) { console.log('routes/api file nahi mili, ignore kar rahe hain.'); }
+try { 
+    const db = require('./database/database'); 
+    initDb = db.initDb; 
+} catch (e) { 
+    console.log('database/database file nahi mili, ignore kar rahe hain.'); 
+}
 
 // --- Basic Setup ---
 const app = express();
 const server = http.createServer(app);
-
-// Cloud hosting (Back4App/Render) ke liye dynamic PORT setting
 const PORT = process.env.PORT || 8080;
-
-// Reverse Proxy ke liye (Cloud server par session support ke liye zaroori)
-app.set('trust proxy', 1);
 
 // --- Middleware ---
 app.use(express.json());
@@ -26,7 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload());
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'a-very-secret-key-that-you-should-change',
+    secret: 'a-very-secret-key-that-you-should-change',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false }
@@ -36,12 +47,17 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'index.html'));
+    const indexPath = path.join(__dirname, 'views', 'index.html');
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            res.send('Server live ho chuka hai! (views/index.html nahi mili)');
+        }
+    });
 });
 
-// --- Routes ---
-app.use('/auth', authRoutes);
-app.use('/api', apiRoutes);
+// --- Routes (Agar files milengi tabhi load hongi) ---
+if (authRoutes) app.use('/auth', authRoutes);
+if (apiRoutes) app.use('/api', apiRoutes);
 
 // --- WebSocket Server ---
 const wss = new WebSocket.Server({ server });
@@ -86,20 +102,31 @@ function broadcastToAll(data) {
     });
 }
 
-setBroadcastFunction(broadcastToAll);
+if (typeof setBroadcastFunction === 'function') {
+    setBroadcastFunction(broadcastToAll);
+}
 
 // --- Server Initialization ---
 async function startServer() {
-    try {
-        await initDb();
-        await initializeRunningTasks();
-
-        server.listen(PORT, '0.0.0.0', () => {
-            console.log(`Server is listening on port ${PORT}`);
-        });
-    } catch (error) {
-        console.error('Failed to start server:', error);
+    if (typeof initDb === 'function') {
+        try {
+            await initDb();
+        } catch (e) {
+            console.error('DB Init Error:', e.message);
+        }
     }
+
+    if (typeof initializeRunningTasks === 'function') {
+        try {
+            await initializeRunningTasks();
+        } catch (e) {
+            console.error('Running Tasks Error:', e.message);
+        }
+    }
+
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server is listening on port ${PORT}`);
+    });
 }
 
 startServer();
