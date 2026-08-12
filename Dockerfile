@@ -1,5 +1,5 @@
-# Node.js 18 Base Image
-FROM node:18-alpine
+# Node.js 20 Base Image (Baileys package ke liye Node 20+ zaroori hai)
+FROM node:20-alpine
 
 # Working Directory set karein
 WORKDIR /usr/src/app
